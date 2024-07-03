@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-analytics.js";
-import { getAuth, createUserWithEmailAndPassword  } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-auth.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, getRedirectResult  } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-auth.js";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -21,17 +21,49 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth();
+const provider = new GoogleAuthProvider();
+const user = auth.currentUser;
+updateuser();
 
 const loginevent = document.getElementById("loginbutton");
 loginevent.addEventListener("click", function(){
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
-  createUserWithEmailAndPassword(auth, email, password)
-  .then((userCredential) => {
-    const user = userCredential.user;
-  })
-  .catch((error) => {
-    const errorCode = error.code;
-    const errorMessage = error.message;
-  });
+  if (user !== null) {
+    signOut(auth, provider)
+    .then((result) => {
+      const user = result.user;
+      updateuser();
+    }).catch((error) => {
+      // Handle Errors here.
+    });
+  } else {
+    signInWithPopup(auth, provider)
+    .then((result) => {
+      const user = result.user;
+      alert(result.user.displayName);
+      updateuser();
+    }).catch((error) => {
+      // Handle Errors here.
+    });
+  }
 });
+
+function updateuser() {
+  if(user !== null) {
+    console.log("Sign-in provider: " + user.providerId);
+    console.log("  Provider-specific UID: " + user.uid);
+    console.log("  Name: " + user.displayName);
+    console.log("  Email: " + user.email);
+    console.log("  Photo URL: " + user.photoURL);
+    const displayName = user.displayName;
+    const email = user.email;
+    const photoURL = user.photoURL;
+    const emailVerified = user.emailVerified;
+    const uid = user.uid;
+    document.getElementById("name").innerHTML = displayName;
+    document.getElementById("pfp").src = photoURL;
+    document.getElementById("loginbutton").innerHTML = 'sign out';
+  } else {
+    document.getElementById("name").innerHTML = 'no user';
+    document.getElementById("loginbutton").innerHTML = 'login';
+  }
+}
