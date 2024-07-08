@@ -2,4 +2,53 @@ body {
     text-align: center;
     background-color: gray;
     color: white;
+    font-family: Arial, sans-serif;
+}
+
+#pfp {
+    float: left;
+    border-radius: 100%;
+}
+
+#name {
+    padding-top: 10px;
+    padding-left: 10px;
+    float: left;
+}
+
+#loginbutton {
+    float: left;
+}
+
+#other {
+    float: left;
+}
+
+article {
+    background-color: white;
+    color: black;
+    padding: 1%;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 20px;
+}
+
+#messageblock {
+    padding: 1%;
+}
+
+.float-right {
+    float: right;
+}
+
+.float-left img {
+    height: 50px;
+    border-radius: 100%;
+    float: left;
+}
+
+.float-left h1 {
+    float: left;
+    padding-left: 1%;
 }
