@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lobby Test!!</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.6/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.6/firebase-database-compat.js"></script>
+    <script type="module">
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFS3sqPN2sf8E627e03KmE-A7tXsoAPuY",
+            authDomain: "testground-861a7.firebaseapp.com",
+            databaseURL: "https://testground-861a7-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "testground-861a7",
+            storageBucket: "testground-861a7.appspot.com",
+            messagingSenderId: "1000059092401",
+            appId: "1:1000059092401:web:04f9439b4a5592877fd190",
+            measurementId: "G-1FZJWV9WMB"
+        };
+    
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+    
+        function generateLobbyCode() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+    
+        function ensureUniqueUsername(lobbyCode, username, callback) {
+            const lobbyRef = db.ref(`lobbies/${lobbyCode}/players`);
+            let uniqueUsername = username;
+    
+            lobbyRef.once('value', snapshot => {
+                const existingPlayers = snapshot.val() || {};
+                let counter = 2;
+    
+                while (existingPlayers[uniqueUsername]) {
+                    uniqueUsername = `${username}${counter}`;
+                    counter++;
+                }
+                callback(uniqueUsername);
+            });
+        }
+    
+        function createLobby() {
+            const creatorName = document.getElementById('creatorNameInput').value;
+            if (!creatorName) {
+                alert('Please enter your name to create a lobby.');
+                return;
+            }
+    
+            const lobbyCode = generateLobbyCode();
+            const lobbyRef = db.ref(`lobbies/${lobbyCode}`);
+    
+            lobbyRef.set({
+                players: {
+                    [creatorName]: {
+                        joinedAt: firebase.database.ServerValue.TIMESTAMP,
+                        isLeader: true
+                    }
+                },
+                status: 'waiting',
+                chat: []
+            });
+    
+            document.getElementById('lobbyCodeDisplay').textContent = `Lobby Code: ${lobbyCode}`;
+            alert(`Lobby created! Share this code with others: ${lobbyCode}`);
+            displayLobbyMembers(lobbyCode);
+            setupChat(lobbyCode);
+            toggleLobbyOptions(true);
+            toggleCreateLobbyButton(false);
+        }
+    
+        function joinLobby() {
+            const lobbyCode = document.getElementById('lobbyCodeInput').value.toUpperCase();
+            const playerName = document.getElementById('playerNameInput').value;
+            if (!lobbyCode || !playerName) {
+                alert('Please enter both the lobby code and your name to join.');
+                return;
+            }
+    
+            ensureUniqueUsername(lobbyCode, playerName, uniqueUsername => {
+                const lobbyRef = db.ref(`lobbies/${lobbyCode}`);
+    
+                lobbyRef.once('value').then(snapshot => {
+                    if (snapshot.exists()) {
+                        const playerRef = lobbyRef.child(`players/${uniqueUsername}`);
+                        playerRef.set({
+                            joinedAt: firebase.database.ServerValue.TIMESTAMP,
+                            isLeader: false
+                        });
+                        alert(`Joined lobby: ${lobbyCode}`);
+                        displayLobbyMembers(lobbyCode);
+                        setupChat(lobbyCode);
+                        toggleLobbyOptions(true);
+                    } else {
+                        alert('Lobby does not exist');
+                    }
+                });
+            });
+        }
+    
+        function leaveLobby() {
+            const lobbyCode = document.getElementById('lobbyCodeInput').value.toUpperCase();
+            const playerName = document.getElementById('playerNameInput').value;
+    
+            if (!lobbyCode || !playerName) {
+                alert('Please enter both the lobby code and your name to leave.');
+                return;
+            }
+    
+            const playerRef = db.ref(`lobbies/${lobbyCode}/players/${playerName}`);
+    
+            playerRef.remove().then(() => {
+                alert('You have left the lobby.');
+                displayLobbyMembers(lobbyCode);
+                toggleLobbyOptions(false);
+                toggleCreateLobbyButton(true);
+            }).catch(error => {
+                console.error('Error leaving the lobby:', error);
+            });
+        }
+    
+        function displayLobbyMembers(lobbyCode) {
+            const lobbyRef = db.ref(`lobbies/${lobbyCode}/players`);
+    
+            lobbyRef.on('value', snapshot => {
+                const membersList = document.getElementById('membersList');
+                membersList.innerHTML = '';
+    
+                let playerCount = 0;
+                snapshot.forEach(playerSnapshot => {
+                    const playerName = playerSnapshot.key;
+                    const isLeader = playerSnapshot.val().isLeader;
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `${playerName}${isLeader ? ' (Leader)' : ''}`;
+                    membersList.appendChild(listItem);
+                    playerCount++;
+                });
+    
+                toggleStartGameButton(playerCount);
+            });
+        }
+    
+        function toggleStartGameButton(playerCount) {
+            const startGameButton = document.getElementById('startGameButton');
+            const minPlayers = 2;
+            const maxPlayers = 8;
+    
+            if (playerCount >= minPlayers && playerCount <= maxPlayers) {
+                startGameButton.disabled = false;
+            } else {
+                startGameButton.disabled = true;
+            }
+        }
+    
+        function setupChat(lobbyCode) {
+            const chatRef = db.ref(`lobbies/${lobbyCode}/chat`);
+    
+            chatRef.on('value', snapshot => {
+                const chatBox = document.getElementById('chatBox');
+                chatBox.innerHTML = '';
+    
+                snapshot.forEach(chatMessageSnapshot => {
+                    const chatMessage = chatMessageSnapshot.val();
+                    const chatItem = document.createElement('p');
+                    chatItem.textContent = `${chatMessage.sender}: ${chatMessage.message}`;
+                    chatBox.appendChild(chatItem);
+                });
+            });
+    
+            document.getElementById('sendChatButton').onclick = () => {
+                const chatInput = document.getElementById('chatInput');
+                const sender = document.getElementById('creatorNameInput').value || document.getElementById('playerNameInput').value || 'Unknown';
+    
+                if (chatInput.value) {
+                    chatRef.push({
+                        sender: sender,
+                        message: chatInput.value
+                    });
+                    chatInput.value = '';
+                }
+            };
+        }
+    
+        function changeUsername() {
+            const lobbyCode = document.getElementById('lobbyCodeInput').value.toUpperCase();
+            const oldName = document.getElementById('playerNameInput').value;
+            const newName = document.getElementById('newNameInput').value;
+
+            // Validation: Ensure that oldName, newName, and lobbyCode are not empty
+            if (!lobbyCode || !oldName || !newName) {
+                alert("Please enter a valid lobby code, current name, and new name.");
+                return;
+            }
+        
+            // Check for any invalid characters in the new name (Firebase restrictions)
+            if (/[\.\#\$\[\]]/.test(newName)) {
+                alert("The new name contains invalid characters.");
+                return;
+            }
+        
+            // Ensure unique username in the lobby
+            ensureUniqueUsername(lobbyCode, newName, uniqueUsername => {
+                if (uniqueUsername !== newName) {
+                    alert(`The name ${newName} is already taken. Your new name is ${uniqueUsername}.`);
+                }
+            
+                // Access the Firebase reference for players
+                const lobbyRef = db.ref(`lobbies/${lobbyCode}/players`);
+                const playerRef = lobbyRef.child(oldName);
+            
+                playerRef.once('value', snapshot => {
+                    if (snapshot.exists()) {
+                        const playerData = snapshot.val();
+                    
+                        // Remove the old player and create a new player with the updated name
+                        lobbyRef.child(oldName).remove().then(() => {
+                            lobbyRef.child(uniqueUsername).set(playerData).then(() => {
+                                // Update the input field and alert the user
+                                document.getElementById('playerNameInput').value = uniqueUsername;
+                                alert(`Your name has been changed to ${uniqueUsername}.`);
+                            }).catch(error => {
+                                console.error("Error updating player data:", error);
+                            });
+                        }).catch(error => {
+                            console.error("Error removing old player:", error);
+                        });
+                    } else {
+                        alert("Player not found in the lobby.");
+                    }
+                }).catch(error => {
+                    console.error("Error fetching player data:", error);
+                });
+            });
+        }
+    
+        function changeLeader(lobbyCode, newLeaderName) {
+            if (!newLeaderName) {
+                alert("Please enter a name to promote to leader.");
+                return;
+            }
+    
+            const lobbyRef = db.ref(`lobbies/${lobbyCode}`);
+            const playersRef = lobbyRef.child('players');
+    
+            playersRef.once('value', snapshot => {
+                const players = snapshot.val();
+                if (players && players[newLeaderName]) {
+                    const previousLeaderName = Object.keys(players).find(playerName => players[playerName].isLeader);
+                    if (previousLeaderName) {
+                        playersRef.child(previousLeaderName).update({ isLeader: false });
+                    }
+    
+                    playersRef.child(newLeaderName).update({ isLeader: true }).then(() => {
+                        alert(`${newLeaderName} is now the new leader!`);
+                        displayLobbyMembers(lobbyCode);
+                    });
+                } else {
+                    alert("Player not found.");
+                }
+            });
+        }
+    
+        function startGame(lobbyCode, minPlayers, maxPlayers) {
+            const lobbyRef = db.ref(`lobbies/${lobbyCode}`);
+            const playersRef = lobbyRef.child('players');
+    
+            playersRef.once('value', snapshot => {
+                const playerCount = snapshot.numChildren();
+    
+                if (playerCount >= minPlayers && playerCount <= maxPlayers) {
+                    alert(`Starting the game with ${playerCount} players!`);
+                    lobbyRef.update({ status: 'started' });
+                } else {
+                    alert(`Cannot start the game. Please ensure you have between ${minPlayers} and ${maxPlayers} players.`);
+                }
+            });
+        }
+    
+        function toggleLobbyOptions(isInLobby) {
+            const lobbyOptions = document.getElementById('lobbyOptions');
+            const gameOptions = document.getElementById('gameOptions');
+            const joinOptions = document.getElementById('joinOptions');
+            const chatBox = document.getElementById('chatBox');
+            const sendChatButton = document.getElementById('sendChatButton');
+            const chatInput = document.getElementById('chatInput');
+            const chatTitle = document.getElementById('chatTitle');
+    
+            if (isInLobby) {
+                lobbyOptions.style.display = 'block';
+                gameOptions.style.display = 'block';
+                joinOptions.style.display = 'none';
+                chatBox.style.display = 'block';
+                sendChatButton.style.display = 'inline';
+                chatInput.style.display = 'block';
+                chatTitle.style.display = 'block';
+                toggleCreateLobbyButton(false);
+            } else {
+                lobbyOptions.style.display = 'none';
+                gameOptions.style.display = 'none';
+                joinOptions.style.display = 'block';
+                chatBox.style.display = 'none';
+                sendChatButton.style.display = 'none';
+                chatInput.style.display = 'none';
+                chatTitle.style.display = 'none';
+                toggleCreateLobbyButton(true);
+            }
+        }
+    
+        function toggleCreateLobbyButton(isVisible) {
+            const createLobbyButton = document.getElementById('createLobbyButton');
+            createLobbyButton.style.display = isVisible ? 'block' : 'none';
+        }
+    
+        window.createLobby = createLobby;
+        window.joinLobby = joinLobby;
+        window.leaveLobby = leaveLobby;
+        window.startGame = startGame;
+        window.changeLeader = changeLeader;
+        window.changeUsername = changeUsername;
+    </script>    
+</head>
+<body>
+    <h1>Lobby Test!!</h1>
+    <div id="joinOptions">
+        <h2>Join a Lobby</h2>
+        <input type="text" id="lobbyCodeInput" placeholder="Enter Lobby Code" />
+        <input type="text" id="playerNameInput" placeholder="Enter Your Name" />
+        <button onclick="joinLobby()">Join Lobby</button>
+    </div>
+    <div id="lobbyOptions" style="display: none;">
+        <h2>Lobby Members</h2>
+        <ul id="membersList"></ul>
+        <h3>Change Party Leader</h3>
+        <input type="text" id="newLeaderName" placeholder="Enter New Leader Name" />
+        <button onclick="changeLeader(document.getElementById('lobbyCodeInput').value.toUpperCase(), document.getElementById('newLeaderName').value)">Change Leader</button>
+        <h3>Change Your Name</h3>
+        <input type="text" id="newNameInput" placeholder="Enter New Name" />
+        <button onclick="changeUsername()">Change Name</button>
+        <h3>Leave Lobby</h3>
+        <button onclick="leaveLobby()">Leave Lobby</button>
+    </div>
+    <div id="gameOptions" style="display: none;">
+        <h2>Start a Game</h2>
+        <button id="startGameButton" onclick="startGame(document.getElementById('lobbyCodeInput').value.toUpperCase(), 2, 8)" disabled>Start Game (2-8 Players)</button>
+    </div>
+    <div>
+        <h2>Create a Lobby</h2>
+        <input type="text" id="creatorNameInput" placeholder="Enter Your Name" />
+        <button id="createLobbyButton" onclick="createLobby()">Create Lobby</button>
+        <p id="lobbyCodeDisplay"></p>
+    </div>
+    <div>
+        <h2 id="chatTitle" style="display: none;">Lobby Chat</h2>
+        <div id="chatBox" style="border: 1px solid #000; height: 150px; overflow-y: scroll; padding: 5px; margin-bottom: 10px; display: none;"></div>
+        <input type="text" id="chatInput" placeholder="Type your message here" style="display: none;" />
+        <button id="sendChatButton" style="display: none;">Send</button>
+    </div>
+</body>
+</html>
